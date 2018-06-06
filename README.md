@@ -13,8 +13,6 @@ A very simple SOCKS4 server :)
 
 ### TODO
 * Add better error handling
-* Bubbling up errors to the main goroutine
-* Connection logging
 * Port arguments
 * Refactor SOCKS server into separate package?
 

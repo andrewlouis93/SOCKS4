@@ -9,6 +9,10 @@ import (
 	"strconv"
 )
 
+func init() {
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+}
+
 var SuccessfulSOCKConnectResponse = []byte{0x0, 0x5A, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
 var FailedSOCKConnectResponse = []byte{0x0, 0x5B, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
 
@@ -68,37 +72,57 @@ func Handshake(connection net.Conn) (net.Conn, error) {
 	return upstreamConn, nil
 }
 
-func handleClient(conn net.Conn) error {
-	// TODO: Add better connection logging here
-	fmt.Println("Accepted new connection...")
+// Pipe starts off goroutines streaming sockets to each other
+func Pipe(conn1 net.Conn, conn2 net.Conn) chan error {
+	errChan := make(chan error)
 
-	// TODO: Error handling isn't transparent. Where can we see errors returned here???
+	go func() {
+		_, err := io.Copy(conn1, conn2)
+		errChan <- err
+	}()
+
+	go func() {
+		_, err := io.Copy(conn2, conn1)
+		errChan <- err
+	}()
+
+	return errChan
+}
+
+func handleClient(conn net.Conn) {
 	upstreamConn, err := Handshake(conn)
 	if err != nil {
-		return err
+		log.Println(err)
+		return
 	}
 
-	fmt.Println("Piping it upppp")
-	go io.Copy(conn, upstreamConn)
-	go io.Copy(upstreamConn, conn)
+	fmt.Printf("Proxying: %v → %v\n", conn.RemoteAddr(), upstreamConn.RemoteAddr())
+	errChan := Pipe(conn, upstreamConn)
 
-	return nil
+	if err := <-errChan; err != nil {
+		log.Println(err)
+	}
+
+	defer func() {
+		conn.Close()
+		upstreamConn.Close()
+	}()
+
+	return
 }
 
 func main() {
-	var err error
-	var sock net.Listener
-
-	if sock, err = net.Listen("tcp", ":8080"); err != nil {
+	sock, err := net.Listen("tcp", ":8080")
+	if err != nil {
 		log.Fatalf("Unable to start listening %v", err)
 	}
 
 	for {
-		var conn net.Conn
-		fmt.Println("Waiting for new connection...")
-		if conn, err = sock.Accept(); err != nil {
-			log.Fatalf("Unable to accept connection %v", err)
+		conn, err := sock.Accept()
+		if err != nil {
+			log.Println(err)
 		} else {
+			fmt.Printf("Accepted new connection: %v\n", conn.RemoteAddr())
 			go handleClient(conn)
 		}
 	}
