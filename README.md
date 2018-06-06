@@ -12,7 +12,6 @@ A very simple SOCKS4 server :)
 * Can you add support for multiple clients?
 
 ### TODO
-* Add better error handling
 * Port arguments
 * Refactor SOCKS server into separate package?
 

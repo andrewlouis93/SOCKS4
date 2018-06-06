@@ -35,34 +35,28 @@ func marshalSOCKRequest(request []byte) (*SOCKRequest, error) {
 	return req, nil
 }
 
-// TODO: We can handle errors better here.
+// Handshake carries out the SOCK4 handshake, returns proxy → upstream connection
 func Handshake(connection net.Conn) (net.Conn, error) {
 	buffer := make([]byte, 128)
-
-	bytesRead, err := connection.Read(buffer)
-	if err != nil {
+	if bytesRead, err := connection.Read(buffer); err != nil {
 		return nil, err
-	}
-	if bytesRead < 9 {
+	} else if bytesRead < 9 {
 		return nil, fmt.Errorf("Less than 8 data bytes sent for SOCK connect request %v", buffer)
 	}
 
-	sReq, err := marshalSOCKRequest(buffer)
-	if err != nil {
+	var sockReq *SOCKRequest
+	var err error
+	if sockReq, err = marshalSOCKRequest(buffer); err != nil {
 		return nil, err
+	} else if sockReq.version != 4 {
+		return nil, fmt.Errorf("Only SOCKS4 supported, you sent version: %v", sockReq.version)
+	} else if sockReq.commandCode != 1 {
+		return nil, fmt.Errorf("Only Stream Connections 1 supported - you sent %v", sockReq.commandCode)
 	}
 
-	if sReq.version != 4 {
-		return nil, fmt.Errorf("Only SOCKS4 supported, you sent version: %v", sReq.version)
-	}
-
-	if sReq.commandCode != 1 {
-		return nil, fmt.Errorf("Only Stream Connections 1 supported - you sent %v", sReq.commandCode)
-	}
-
-	addr := net.JoinHostPort(sReq.ipAddress, sReq.port)
-	upstreamConn, err := net.Dial("tcp4", addr)
-	if err != nil {
+	var upstreamConn net.Conn
+	addr := net.JoinHostPort(sockReq.ipAddress, sockReq.port)
+	if upstreamConn, err = net.Dial("tcp4", addr); err != nil {
 		connection.Write(FailedSOCKConnectResponse)
 		upstreamConn.Close()
 		return nil, err
@@ -89,7 +83,7 @@ func Pipe(conn1 net.Conn, conn2 net.Conn) chan error {
 	return errChan
 }
 
-func handleClient(conn net.Conn) {
+func Handle(conn net.Conn) {
 	upstreamConn, err := Handshake(conn)
 	if err != nil {
 		log.Println(err)
@@ -107,8 +101,6 @@ func handleClient(conn net.Conn) {
 		conn.Close()
 		upstreamConn.Close()
 	}()
-
-	return
 }
 
 func main() {
@@ -118,12 +110,11 @@ func main() {
 	}
 
 	for {
-		conn, err := sock.Accept()
-		if err != nil {
+		if conn, err := sock.Accept(); err != nil {
 			log.Println(err)
 		} else {
 			fmt.Printf("Accepted new connection: %v\n", conn.RemoteAddr())
-			go handleClient(conn)
+			go Handle(conn)
 		}
 	}
 }
