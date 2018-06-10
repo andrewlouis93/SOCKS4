@@ -3,6 +3,7 @@ package socks4
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -105,9 +106,9 @@ func Handle(conn net.Conn) {
 	}
 
 	fmt.Printf("Proxying: %v → %v\n", conn.RemoteAddr(), upstreamConn.RemoteAddr())
-	errChan := pipe(conn, upstreamConn)
 
-	if err := <-errChan; err != nil {
+	err = pipe(conn, upstreamConn)
+	if err != io.EOF {
 		log.Println(err)
 	}
 

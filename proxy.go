@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	port = flag.Int("port", 8080, "port you want socks4 server to listen on :)")
+	port = flag.Int("p", 8080, "port you want socks4 server to listen on :)")
 )
 
 func init() {
